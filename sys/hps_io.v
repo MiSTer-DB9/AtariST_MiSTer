@@ -48,6 +48,7 @@ module hps_io #(parameter STRLEN=0, PS2DIV=0, WIDE=0, VDNUM=1, PS2WE=0)
 	output reg [15:0] joystick_analog_3,
 	output reg [15:0] joystick_analog_4,
 	output reg [15:0] joystick_analog_5,
+	input      [15:0] joy_raw,
 
 	// paddle 0..255
 	output reg  [7:0] paddle_0,
@@ -475,6 +476,11 @@ always@(posedge clk_sys) begin
 							{gamma_wr, gamma_value} <= {1'b1,io_din[7:0]};
 							if (byte_cnt[1:0] == 3) byte_cnt <= 1;
 						end
+				
+				// Reading user_io raw joy
+				'h0f: io_dout <= joy_raw;
+				// buttons and switches
+				'h01: cfg <= io_din;
 			endcase
 		end
 	end
