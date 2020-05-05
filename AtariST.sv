@@ -135,8 +135,8 @@ assign UART_TXD = uart ? usart_so  : midi_tx;
 
 wire         CLK_JOY = CLK_50M;         //Assign clock between 40-50Mhz
 //wire   [2:0] JOY_FLAG  = {status[30],status[31],status[29]}; //Assign 3 bits of status (31:29) o (63:61)
-wire   [2:0] JOY_FLAG  = 3'b101; // b000:off, b100:DB9MD 1P, b010:DB15 1P, b101:DB9MD 2P, b011:DB15 2P
-//wire   [2:0] JOY_FLAG  = {db9type[1],db9type[2],db9type[0]};
+//wire   [2:0] JOY_FLAG  = 3'b101; // b000:off, b100:DB9MD 1P, b010:DB15 1P, b101:DB9MD 2P, b011:DB15 2P
+wire   [2:0] JOY_FLAG  = {status[33],status[34],status[32]}; //Assign 3 bits of status (34:32) 
 wire         JOY_CLK, JOY_LOAD, JOY_SPLIT, JOY_MDSEL;
 wire   [5:0] JOY_MDIN  = JOY_FLAG[2] ? {USER_IN[6],USER_IN[3],USER_IN[5],USER_IN[7],USER_IN[1],USER_IN[2]} : '1;
 wire         JOY_DATA  = JOY_FLAG[1] ? USER_IN[5] : '1;
@@ -188,7 +188,7 @@ parameter CONF_STR = {
 };
 
 wire  [1:0] buttons;
-wire [31:0] status;
+wire [39:0] status;
 wire        forced_scandoubler;
 wire [31:0] sd_lba;
 wire  [1:0] sd_rd;
@@ -215,10 +215,10 @@ wire [21:0] gamma_bus;
 
 
 // F2 F1 U D L R 
-//wire [31:0] joy0 = joydb_1ena ? (OSD_STATUS? 32'b000000 : {joydb_1[6],joydb_1[5]|joydb_1[4],joydb_1[3:0]}) : joy0_USB;
-//wire [31:0] joy1 = joydb_2ena ? (OSD_STATUS? 32'b000000 : {joydb_2[6],joydb_2[5]|joydb_2[4],joydb_2[3:0]}) : joydb_1ena ? joy0_USB : joy1_USB;
-wire [31:0] joy0 = OSD_STATUS? 32'b000000 : {joydb_1[6],joydb_1[5]|joydb_1[4],joydb_1[3:0]} | joy0_USB;
-wire [31:0] joy1 = OSD_STATUS? 32'b000000 : {joydb_2[6],joydb_2[5]|joydb_2[4],joydb_2[3:0]} | joy1_USB;
+wire [31:0] joy0 = joydb_1ena ? (OSD_STATUS? 32'b000000 : {joydb_1[6],joydb_1[5]|joydb_1[4],joydb_1[3:0]}) : joy0_USB;
+wire [31:0] joy1 = joydb_2ena ? (OSD_STATUS? 32'b000000 : {joydb_2[6],joydb_2[5]|joydb_2[4],joydb_2[3:0]}) : joydb_1ena ? joy0_USB : joy1_USB;
+//wire [31:0] joy0 = OSD_STATUS? 32'b000000 : {joydb_1[6],joydb_1[5]|joydb_1[4],joydb_1[3:0]} | joy0_USB;
+//wire [31:0] joy1 = OSD_STATUS? 32'b000000 : {joydb_2[6],joydb_2[5]|joydb_2[4],joydb_2[3:0]} | joy1_USB;
 wire [31:0] joy2 = joydb_2ena ? joy0_USB : joydb_1ena ? joy1_USB : joy2_USB;
 wire [31:0] joy3 = joydb_2ena ? joy1_USB : joydb_1ena ? joy2_USB : joy3_USB;
 
