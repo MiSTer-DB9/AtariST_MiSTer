@@ -52,6 +52,7 @@ module emu
 	output        VGA_DE,    // = ~(VBlank | HBlank)
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
+	output        VGA_SCALER, // Force VGA scaler
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -152,6 +153,7 @@ assign LED_USER  = ~&floppy_sel;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
+assign VGA_SCALER= 0;
 
 assign VIDEO_ARX = (!ar) ? (viking_active ? 8'd5 : 8'd4) : (ar - 1'd1);
 assign VIDEO_ARY = (!ar) ? (viking_active ? 8'd4 : 8'd3) : 8'd0;
@@ -211,6 +213,7 @@ wire  [7:0] ioctl_index;
 wire [20:0] joy0_USB,joy1_USB,joy2_USB,joy3_USB;
 wire [10:0] ps2_key;
 wire [24:0] ps2_mouse;
+wire  [7:0] ps2_mouse_ext;
 
 wire [21:0] gamma_bus;
 
@@ -273,6 +276,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 	.joy_raw(OSD_STATUS? (joydb_1[5:0]|joydb_2[5:0]) : 6'b000000 ),
 	.ps2_key(ps2_key),
 	.ps2_mouse(ps2_mouse),
+	.ps2_mouse_ext(ps2_mouse_ext),
 
 	.status(status),
 	.info_req(info_req),
@@ -900,11 +904,12 @@ ikbd ikbd (
 
 	.ps2_key(ps2_key),
 	.ps2_mouse(ps2_mouse),
+	.ps2_mouse_ext(ps2_mouse_ext),
 
 	.tx(ikbd_tx),
 	.rx(ikbd_rx),
 	// Port 2 is the first joystick for most games, so swap it by default.
-	.joystick0(joy_port_ste ? 5'd0 : {joy1[4], joy1[0], joy1[1], joy1[2], joy1[3]}),
+	.joystick0(joy_port_ste ? 6'd0 : {joy1[5:4], joy1[0], joy1[1], joy1[2], joy1[3]}),
 	.joystick1(joy_port_ste ? 5'd0 : {joy0[4], joy0[0], joy0[1], joy0[2], joy0[3]}),
 	.joy_port_toggle(joy_port_ste)
 );
