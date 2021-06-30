@@ -364,7 +364,7 @@ hps_io #(.STRLEN(($size(CONF_STR1) + $size(mt32_curmode) + $size(CONF_STR2))>>3)
 	.ps2_mouse_ext(ps2_mouse_ext),
 
 	.status(status),
-	.status_menumask({mt32_cfg,mt32_available}),
+	.status_menumask({mt32_cfg,1'b1}), //mt32_available 
 	.info_req(info_req),
 	.info(info),
 
