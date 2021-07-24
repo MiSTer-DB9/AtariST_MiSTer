@@ -57,8 +57,9 @@ module emu
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
+	output        HDMI_FREEZE,
 
-`ifdef USE_FB
+`ifdef MISTER_FB
 	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
@@ -76,6 +77,7 @@ module emu
 	input         FB_LL,
 	output        FB_FORCE_BLANK,
 
+`ifdef MISTER_FB_PALETTE
 	// Palette control for 8bit modes.
 	// Ignored for other video modes.
 	output        FB_PAL_CLK,
@@ -83,6 +85,7 @@ module emu
 	output [23:0] FB_PAL_DOUT,
 	input  [23:0] FB_PAL_DIN,
 	output        FB_PAL_WR,
+`endif
 `endif
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
@@ -114,7 +117,6 @@ module emu
 	output        SD_CS,
 	input         SD_CD,
 
-`ifdef USE_DDRAM
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
 	output        DDRAM_CLK,
@@ -127,9 +129,7 @@ module emu
 	output [63:0] DDRAM_DIN,
 	output  [7:0] DDRAM_BE,
 	output        DDRAM_WE,
-`endif
 
-`ifdef USE_SDRAM
 	//SDRAM interface with lower latency
 	output        SDRAM_CLK,
 	output        SDRAM_CKE,
@@ -142,10 +142,10 @@ module emu
 	output        SDRAM_nCAS,
 	output        SDRAM_nRAS,
 	output        SDRAM_nWE,
-`endif
 
-`ifdef DUAL_SDRAM
+`ifdef MISTER_DUAL_SDRAM
 	//Secondary SDRAM
+	//Set all output SDRAM_* signals to Z ASAP if SDRAM2_EN is 0
 	input         SDRAM2_EN,
 	output        SDRAM2_CLK,
 	output [12:0] SDRAM2_A,
@@ -256,6 +256,7 @@ assign LED_DISK  = 0;
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
 assign VGA_SCALER= 0;
+assign HDMI_FREEZE = 0;
 
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
@@ -298,19 +299,25 @@ wire init = ~pll_locked | RESET;
 ////////////////////////////  HPS I/O  //////////////////////////////////
 
 `include "build_id.v"
-parameter CONF_STR1 = {
+parameter CONF_STR = {
 	"AtariST;UART19200:9600:4800:2400:1200,MIDI;",
 	"J,A,B,C,Option,Pause,#,*,0,1,2,3,4/L,5,6/R,7/Z,8/Y,9/X;",
 	"jn,A,B,X,Select,Start,,,,,,,L,,R;",
 	"I,",
 	"ST joysticks,",
 	"STe joysticks,",
-	"MT32-pi: "
-};
-
-localparam CONF_STR2 =
-{
-	";",
+	"MT32-pi: SoundFont #0,",
+	"MT32-pi: SoundFont #1,",
+	"MT32-pi: SoundFont #2,",
+	"MT32-pi: SoundFont #3,",
+	"MT32-pi: SoundFont #4,",
+	"MT32-pi: SoundFont #5,",
+	"MT32-pi: SoundFont #6,",
+	"MT32-pi: SoundFont #7,",
+	"MT32-pi: MT-32 v1,",
+	"MT32-pi: MT-32 v2,",
+	"MT32-pi: CM-32L,",
+	"MT32-pi: Unknown mode;",
 	"V,v",`BUILD_DATE
 };
 
@@ -320,7 +327,7 @@ wire        forced_scandoubler;
 wire [31:0] sd_lba;
 wire  [1:0] sd_rd;
 wire  [1:0] sd_wr;
-wire        sd_ack;
+wire  [1:0] sd_ack;
 wire  [7:0] sd_buff_addr;
 wire [15:0] sd_buff_dout;
 wire [15:0] sd_buff_din;
@@ -342,12 +349,12 @@ wire  [7:0] ps2_mouse_ext;
 wire [21:0] gamma_bus;
 
 wire  [7:0] uart_mode;
+wire        uart = (uart_mode < 3);
 
-hps_io #(.STRLEN(($size(CONF_STR1) + $size(mt32_curmode) + $size(CONF_STR2))>>3), .WIDE(1), .VDNUM(2)) hps_io
+hps_io #(.CONF_STR(CONF_STR), .WIDE(1), .VDNUM(2)) hps_io
 (
 	.clk_sys(clk_32),
 	.HPS_BUS(HPS_BUS),
-	.conf_str({CONF_STR1, mt32_curmode, CONF_STR2}),
 
 	.buttons(buttons),
 	.forced_scandoubler(forced_scandoubler),
@@ -374,13 +381,13 @@ hps_io #(.STRLEN(($size(CONF_STR1) + $size(mt32_curmode) + $size(CONF_STR2))>>3)
 	.ioctl_download(ioctl_download),
 	.ioctl_index(ioctl_index),
 
-	.sd_lba(sd_lba),
+	.sd_lba('{sd_lba,sd_lba}),
 	.sd_rd(sd_rd),
 	.sd_wr(sd_wr),
 	.sd_ack(sd_ack),
 	.sd_buff_addr(sd_buff_addr),
 	.sd_buff_dout(sd_buff_dout),
-	.sd_buff_din(sd_buff_din),
+	.sd_buff_din('{sd_buff_din,sd_buff_din}),
 	.sd_buff_wr(sd_buff_wr),
 
 	.img_mounted(img_mounted),
@@ -654,12 +661,6 @@ mt32pi mt32pi
 	.midi_tx(midi_tx | mt32_mute)
 );
 
-wire [87:0] mt32_curmode = {(mt32_mode == 'hA2)                  ? {"SoundFont ", {5'b00110, mt32_sf[2:0]}} :
-                            (mt32_mode == 'hA1 && mt32_rom == 0) ?  "   MT-32 v1" :
-                            (mt32_mode == 'hA1 && mt32_rom == 1) ?  "   MT-32 v2" :
-                            (mt32_mode == 'hA1 && mt32_rom == 2) ?  "     CM-32L" :
-                                                                    "    Unknown" };
-
 wire  [4:0] mt32_cfg = (mt32_mode == 'hA2) ? {mt32_sf[2:0],  2'b10} :
                        (mt32_mode == 'hA1) ? {mt32_rom[1:0], 2'b01} : 5'd0;
 
@@ -708,7 +709,11 @@ always @(posedge clk_32) begin
 	old_mode <= joy_port_ste;
 	info_req <= (old_mode ^ joy_port_ste) || ((old_mt32mode ^ mt32_newmode) && (mt32_info == 1));
 
-	info <= (old_mode ^ joy_port_ste) ? (joy_port_ste ? 8'd2 : 8'd1) : 8'd3;
+	info <= (old_mode ^ joy_port_ste) ? (joy_port_ste ? 8'd2 : 8'd1) :
+           (mt32_mode == 'hA2)                  ? (8'd3 + mt32_sf[2:0]) :
+           (mt32_mode == 'hA1 && mt32_rom == 0) ?  8'd11 :
+           (mt32_mode == 'hA1 && mt32_rom == 1) ?  8'd12 :
+           (mt32_mode == 'hA1 && mt32_rom == 2) ?  8'd13 : 8'd14;
 end
 
 
@@ -717,31 +722,25 @@ end
 //////////////////////////////////////////////////////////////////////////////////
 
 // enable additional ste/megaste features
-wire ste = status[23] || status[24];
-wire mste = status[24];
-wire steroids = status[23] && status[24];  // a STE on steroids
-
-wire       psg_stereo = status[22];
-
-// STe always has a blitter
-wire       blitter_en = (status[19] || ste);
-wire       viking_en = status[28];
-wire [1:0] scanlines = status[21:20];
-wire [8:0] acsi_enable = status[17:10];
-wire [1:0] fdc_wp = status[7:6];
+wire       MEM512K      = (status[3:1] == 3'd0);
+wire       MEM1M        = (status[3:1] == 3'd1);
+wire       MEM2M        = (status[3:1] == 3'd2);
+wire       MEM4M        = (status[3:1] == 3'd3);
+wire       MEM8M        = (status[3:1] == 3'd4);
+wire       MEM14M       = (status[3:1] == 3'd5);
+wire [1:0] fdc_wp       = status[7:6];
 wire       mono_monitor = status[8];
-wire       narrow_brd = status[29];
-wire       mde60 = status[30];
-wire [1:0] ar = {status[31],status[9]};
-wire       uart = (uart_mode < 3);
-
-// RAM size selects
-wire MEM512K = (status[3:1] == 3'd0);
-wire MEM1M   = (status[3:1] == 3'd1);
-wire MEM2M   = (status[3:1] == 3'd2);
-wire MEM4M   = (status[3:1] == 3'd3);
-wire MEM8M   = (status[3:1] == 3'd4);
-wire MEM14M  = (status[3:1] == 3'd5);
+wire [8:0] acsi_enable  = status[17:10];
+wire       blitter_en   = (status[19] || ste);
+wire [1:0] scanlines    = status[21:20];
+wire       psg_stereo   = status[22];
+wire       ste          = status[23] || status[24];
+wire       mste         = status[24];
+wire       steroids     = status[23] && status[24];  // a STE on steroids
+wire       viking_en    = status[28];
+wire       narrow_brd   = status[29];
+wire       mde60        = status[30];
+wire [1:0] ar           = {status[31],status[9]};
 
 // synchronized reset signal
 reg reset;
@@ -1047,9 +1046,9 @@ wire        shifter_cycle = (turbo_bus && (bus_cycle == 0 || bus_cycle == 3)) ||
 wire        mcu_dtack_n_adj = (use_16mhz & ~rom_n) ? (mcu_dtack_n | shifter_cycle) : mcu_dtack_n;
 
 fx68k fx68k (
-	.clk        ( clk_32 ),
-	.extReset   ( reset ),
-	.pwrUp      ( reset ),
+	.clk        ( clk_32     ),
+	.extReset   ( reset      ),
+	.pwrUp      ( reset      ),
 	.enPhi1     ( fx68_phi1 | reset ),
 	.enPhi2     ( fx68_phi2 | reset ),
 
@@ -1065,15 +1064,16 @@ fx68k fx68k (
 	.BGn        ( blitter_bg_n ),
 	.oRESETn    ( cpu_reset_n_o ),
 	.oHALTEDn   (),
-	.DTACKn     ( dtack_n ),
-	.VPAn       ( vpa_n ),
-	.BERRn      ( berr_n ),
+	.DTACKn     ( dtack_n    ),
+	.VPAn       ( vpa_n      ),
+	.BERRn      ( berr_n     ),
+	.HALTn      ( 1'b1       ),
 	.BRn        ( blitter_br_n & mcu_br_n ),
 	.BGACKn     ( blitter_bgack_n ),
-	.IPL0n      ( ipl0_n ),
-	.IPL1n      ( ipl1_n ),
-	.IPL2n      ( ipl2_n ),
-	.iEdb       ( cpu_din ),
+	.IPL0n      ( ipl0_n     ),
+	.IPL1n      ( ipl1_n     ),
+	.IPL2n      ( ipl2_n     ),
+	.iEdb       ( cpu_din    ),
 	.oEdb       ( cpu_dout ),
 	.eab        ( cpu_a )
 );
@@ -1225,7 +1225,7 @@ end
 // using the "gauntlet2 interface", fire of
 // joystick 0 is connected to the mfp I0 (busy)
 wire [7:0] port_b_in = { ~joy2[0], ~joy2[1], ~joy2[2], ~joy2[3],~joy3[0], ~joy3[1], ~joy3[2], ~joy3[3]};
-wire [7:0] port_a_in = { 2'b11, ~joy3[4], 5'b11111 };
+wire [7:0] port_a_in = { port_a_out[7:6], ~joy3[4], port_a_out[4:0] };
 wire [7:0] port_a_out;
 wire [7:0] port_b_out;
 wire       floppy_side = port_a_out[0];
@@ -1441,7 +1441,7 @@ wire [7:0] fdc_dout;
 // but we can simply map all such broken accesses to drive A only
 wire [1:0] floppy_sel_exclusive = (floppy_sel == 2'b00)?2'b10:floppy_sel;
 
-fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
+fdc1772 #(.IMG_TYPE(1)) fdc1772 (
 	.clkcpu         ( clk_32           ), // system cpu clock.
 	.clk8m_en       ( mhz8_en1         ),
 
@@ -1467,7 +1467,7 @@ fdc1772 #(.SECTOR_SIZE_CODE(2'd2),.SECTOR_BASE(1'b1)) fdc1772 (
 	.sd_lba         ( sd_lba           ),
 	.sd_rd          ( sd_rd            ),
 	.sd_wr          ( sd_wr            ),
-	.sd_ack         ( sd_ack           ),
+	.sd_ack         ( |sd_ack          ),
 	.sd_buff_addr   ( sd_buff_addr     ),
 	.sd_dout        ( sd_buff_dout     ),
 	.sd_din         ( sd_buff_din      ),
