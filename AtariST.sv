@@ -54,13 +54,14 @@ module emu
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
 	output        VGA_SCALER, // Force VGA scaler
+	output        VGA_DISABLE, // analog out is off
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
 	output        HDMI_FREEZE,
 
 `ifdef MISTER_FB
-	// Use framebuffer in DDRAM (USE_FB=1 in qsf)
+	// Use framebuffer in DDRAM
 	// FB_FORMAT:
 	//    [2:0] : 011=8bpp(palette) 100=16bpp 101=24bpp 110=32bpp
 	//    [3]   : 0=16bits 565 1=16bits 1555
@@ -256,6 +257,7 @@ assign LED_DISK  = 0;
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
 assign VGA_SCALER= 0;
+assign VGA_DISABLE = 0;
 assign HDMI_FREEZE = 0;
 
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0;
@@ -467,19 +469,23 @@ wire [11:0] vend[8]   = '{ 261, 311, 437, 0,  252, 293, 522, 0};
 
 reg       hblank_gen, vblank_gen;
 reg [2:0] mode;
+reg       vsync_n_l, hsync_n_l;
 always @(posedge clk_32) begin
-	reg old_vs, old_hs;
 	reg  [11:0] hcnt,vcnt;
 	
 	hcnt <= hcnt + 1'd1;
-	old_hs <= hsync_n;
-	if(~old_hs & hsync_n) begin
+	hsync_n_l <= hsync_n;
+
+	if(~hsync_n_l & hsync_n) begin
 		hcnt <= 0;
 		vcnt <= vcnt + 1'd1;
 	end
 
-	old_vs <= vsync_n;
-	if(old_vs & ~vsync_n) begin
+	if (hsync_n_l & ~hsync_n) begin
+		vsync_n_l <= vsync_n;
+	end
+
+	if(vsync_n_l & ~vsync_n) begin
 		mode <= {mono ? mde60 : narrow_brd, mono, ~mono & pal};
 		vcnt <= 0;
 	end
@@ -501,8 +507,8 @@ linedoubler linedoubler
 	.clk_sys(clk_32),
 	.enable(sd_ena),
 
-	.hs_in(~hsync_n),
-	.vs_in(~vsync_n),
+	.hs_in(~hsync_n_l),
+	.vs_in(~vsync_n_l),
 	.hbl_in(hblank_gen),
 	.vbl_in(vblank_gen),
 	.r_in(r),
@@ -799,7 +805,7 @@ wire        cpu_reset_n_o;
 wire [15:0] cpu_din, cpu_dout;
 wire [23:1] cpu_a;
 
-wire        rom_n = rom0_n & rom1_n & rom2_n & (rom3_n | cubase_enable) & rom4_n & rom5_n & rom6_n & romp_n;
+wire        rom_n = rom0_n & rom1_n & rom2_n & rom3_n & rom4_n & rom5_n & rom6_n & romp_n;
 assign      cpu_din = 
               ~fcs_n ? dma_data_out :
               blitter_sel ? blitter_data_out :
@@ -1571,7 +1577,9 @@ wire sdram_uds = (cpu_cycle & dio_download)?1'b1:ram_uds;
 wire sdram_lds = (cpu_cycle & dio_download)?1'b1:ram_lds;
 
 wire [23:1] rom_a = (!rom2_n & ~tos192k) ? { 4'hE, 2'b00, mbus_a[17:1] } :
-                    (!rom2_n &  tos192k) ? { 4'hF, 2'b11, mbus_a[17:1] } : mbus_a;
+                    (!rom2_n &  tos192k) ? { 4'hF, 2'b11, mbus_a[17:1] } : 
+                    !rom4_n              ? { 8'hFA,       mbus_a[15:1] } : 
+                    !rom3_n              ? { 8'hFB,       mbus_a[15:1] } : mbus_a;
 
 wire [15:0] ram_data_out;
 wire [63:0] ram_data_out64;
