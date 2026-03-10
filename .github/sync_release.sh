@@ -4,10 +4,10 @@
 set -euo pipefail
 
 UPSTREAM_REPO="https://github.com/MiSTer-devel/AtariST_MiSTer.git"
-CORE_NAME=(AtariST)
+CORE_NAME=(AtariSTUSERIO2 AtariST)
 MAIN_BRANCH="master"
-COMPILATION_INPUT=(AtariST.qpf)
-COMPILATION_OUTPUT=(output_files/AtariST.rbf)
+COMPILATION_INPUT=(AtariST_USERIO2.qpf AtariST.qpf)
+COMPILATION_OUTPUT=(output_files/AtariST_USERIO2.rbf output_files/AtariST.rbf)
 QUARTUS_IMAGE="theypsilon/quartus-lite-c5:17.0.2.docker0"
 
 echo "Fetching upstream:"
