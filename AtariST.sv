@@ -191,13 +191,15 @@ module emu
 assign USER_PP = USER_PP_DRIVE;
 // [MiSTer-DB9 END]
 // [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: joydb wrapper
-wire   [1:0] joy_type        = status[127:126]; // 0=Off, 1=Saturn, 2=DB9MD, 3=DB15
-wire         joy_2p          = status[125];
+// status[63:62/61] mirror ext_ctrl[31:30/29] sent by Main_MiSTer's
+// st_tos.cpp:set_control. tos_auto_db9() writes those on core launch.
+// user_io_status_set is a no-op for is_st(), so OSD-driven status bits in the
+// [127:64] range never reach the FPGA — the same bits Minimig uses.
+wire   [1:0] joy_type        = status[63:62]; // 0=Off, 1=Saturn, 2=DB9MD, 3=DB15
+wire         joy_2p          = status[61];
 wire         joy_db9md_en    = (joy_type == 2'd2);
 wire         joy_db15_en     = (joy_type == 2'd3);
 wire         joy_any_en      = |joy_type;
-// Legacy 3-bit alias for fork-specific MT32 / SNAC fallback code.
-wire   [2:0] JOY_FLAG        = {joy_db9md_en, joy_db15_en, joy_2p};
 // SECOND_MT32 build adds an OSD toggle to route MT32 to USER_IO instead of USER_IO2.
 `ifdef SECOND_MT32
 wire         mt32_on_primary = status[60]; // 0=USER_IO2 (default), 1=USER_IO
@@ -339,10 +341,6 @@ wire init = ~pll_locked | RESET;
 `include "build_id.v"
 parameter CONF_STR = {
 	"AtariST;UART19200:9600:4800:2400:1200,MIDI;",
-	// [MiSTer-DB9-Pro BEGIN] - Saturn-first UserIO Joystick selector
-	"O[127:126],UserIO Joystick,Off,Saturn,DB9MD,DB15;",
-	"O[125],UserIO Players, 1 Player,2 Players;",
-	// [MiSTer-DB9-Pro END]
 	"J,A,B,C,Option,Pause,#,*,0,1,2,3,4/L,5,6/R,7/Z,8/Y,9/X;",
 	"jn,A,B,X,Select,Start,,,,,,,L,,R;",
 	"I,",
@@ -364,7 +362,8 @@ parameter CONF_STR = {
 };
 
 wire  [1:0] buttons;
-// [MiSTer-DB9 BEGIN] - widened to 128 bits for joy_type at [127:126] and joy_2p at [125]
+// [MiSTer-DB9 BEGIN] - 128-bit status to match hps_io.sv; AtariST only writes [63:0]
+// via st_tos set_control (system_ctrl + ext_ctrl). [127:64] stays zero.
 wire [127:0] status;
 // [MiSTer-DB9 END]
 wire        forced_scandoubler;
