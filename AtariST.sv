@@ -191,6 +191,7 @@ module emu
 assign USER_PP = USER_PP_DRIVE;
 // [MiSTer-DB9 END]
 // [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: joydb wrapper
+// [MiSTer-DB9 RESERVED status bits: 63:62 61]
 // status[63:62/61] mirror ext_ctrl[31:30/29] sent by Main_MiSTer's
 // st_tos.cpp:set_control. tos_auto_db9() writes those on core launch.
 // user_io_status_set is a no-op for is_st(), so OSD-driven status bits in the
