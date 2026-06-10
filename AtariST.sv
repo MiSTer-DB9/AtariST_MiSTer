@@ -240,8 +240,17 @@ wire         mt32_primary_active = mt32_on_primary & mt32_use;
 wire         mt32_primary_active = mt32_use;
 `endif
 // [MiSTer-DB9 END]
+// [MiSTer-DB9 BEGIN] - DB9 programmable-remap matrix wires
+// joydb_*_mapped = MiSTer-standard joystick words (consumed in Layer B);
+// db9_remap_* = 0xFD selector stream driven by the hps_io instance.
+wire  [15:0] joydb_1_mapped, joydb_2_mapped;
+wire         db9_remap_cmd;
+wire   [5:0] db9_remap_byte_cnt;
+wire  [15:0] db9_remap_din;
+// [MiSTer-DB9 END]
 joydb joydb (
   .clk             ( CLK_JOY         ),
+  .clk_sys         ( clk_32            ),
   .USER_IN         ( USER_IN         ),
   .OSD_STATUS          ( OSD_STATUS          ),
   .snac_active         ( snac_active         ),
@@ -256,6 +265,11 @@ joydb joydb (
   .joydb_2         ( joydb_2         ),
   .joydb_1ena      ( joydb_1ena      ),
   .joydb_2ena      ( joydb_2ena      ),
+  .remap_cmd       ( db9_remap_cmd      ),
+  .remap_byte_cnt  ( db9_remap_byte_cnt ),
+  .remap_din       ( db9_remap_din      ),
+  .joydb_1_mapped  ( joydb_1_mapped     ),
+  .joydb_2_mapped  ( joydb_2_mapped     ),
   .joy_raw         ( joy_raw_payload )
 );
 // USER_OUT driven by always_comb below (composes wrapper output with MT32 fallback).
@@ -297,8 +311,8 @@ always_comb begin
 end
 // [MiSTer-DB9 END]
 
-wire [15:0] joy0 = joydb_1ena ? (OSD_STATUS ? 16'b0 : joydb_1) : joy0_usb;
-wire [15:0] joy1 = joydb_2ena ? (OSD_STATUS ? 16'b0 : joydb_2) : joydb_1ena ? joy0_usb : joy1_usb;
+wire [15:0] joy0 = joydb_1ena ? (OSD_STATUS ? 16'b0 : joydb_1_mapped[15:0]) : joy0_usb;
+wire [15:0] joy1 = joydb_2ena ? (OSD_STATUS ? 16'b0 : joydb_2_mapped[15:0]) : joydb_1ena ? joy0_usb : joy1_usb;
 wire [15:0] joy2 = joydb_2ena ? joy0_usb : joydb_1ena ? joy1_usb : joy2_usb;
 wire [15:0] joy3 = joydb_2ena ? joy1_usb : joydb_1ena ? joy2_usb : joy3_usb;
 // [MiSTer-DB9 END]
@@ -429,6 +443,10 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1), .VDNUM(2)) hps_io
 	// [MiSTer-DB9 BEGIN] - DB9/SNAC8 support
 	// [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: joy_raw
 	.joy_raw(OSD_STATUS ? joy_raw_payload : 16'b0),
+	// programmable remap matrix selector load (UIO_DB9_MAP 0xFD)
+	.db9_remap_cmd(db9_remap_cmd),
+	.db9_remap_byte_cnt(db9_remap_byte_cnt),
+	.db9_remap_din(db9_remap_din),
 	// [MiSTer-DB9 END]
 	// [MiSTer-DB9-Pro BEGIN] - Saturn key gate
 	.saturn_unlocked(saturn_unlocked),
