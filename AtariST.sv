@@ -239,6 +239,7 @@ wire         mt32_primary_active = mt32_on_primary & mt32_use;
 `else
 wire         mt32_primary_active = mt32_use;
 `endif
+wire         mt32_present;  // joydb BCLK detector: RPi streaming I2S
 // [MiSTer-DB9 END]
 // [MiSTer-DB9 BEGIN] - DB9 programmable-remap matrix wires
 // joydb_*_mapped = MiSTer-standard joystick words (consumed in Layer B);
@@ -279,6 +280,7 @@ joydb joydb (
   .remap_default_db9md ( db9_remap_default_db9md ),
   .joydb_1_mapped  ( joydb_1_mapped     ),
   .joydb_2_mapped  ( joydb_2_mapped     ),
+  .mt32_present    ( mt32_present       ),
   .joy_raw         ( joy_raw_payload )
 );
 // USER_OUT driven by always_comb below (composes wrapper output with MT32 fallback).
@@ -297,12 +299,14 @@ assign       USER_OUT2 = mt32_on_primary ? 8'hFF : {1'b1, USER_OUT_MT32};
 // [MiSTer-DB9 END]
 
 // [MiSTer-DB9 BEGIN] - DB9/SNAC8 support: USER_OUT compose with MT32 anti-contention
-// Priority: DB9 wrapper (joy_any_en) > MT32-pi (mt32_use Gate 2) > USER_OUT_DRIVE.
+// Priority: DB9 wrapper (joy_any_en) > MT32-pi (Gate 2) > USER_OUT_DRIVE.
 // The default is USER_OUT_DRIVE, not a constant idle, so the OSD-open autodetect
 // probe reaches the pins with UserIO Joystick Off (it is 8'hFF when the probe is idle).
 // MT32 anti-contention: paired with the joy_any_en|mt32_disable Gate 1 below on
-// USER_IN_MT32, the mt32_use AND-gate ensures MT32 only drives the shared USER_IO
-// after the RPi has been detected — preventing boot-window contention with DB9.
+// USER_IN_MT32, Gate 2 lets MT32 drive the shared USER_IO only after an RPi is
+// detected, by its I2C (mt32_use) or by its I2S bit clock (mt32_present, for an
+// RPi with no I2C on the user port, e.g. Decapod). With no RPi it stays shut, so
+// no boot-window contention with DB9.
 always_comb begin
 	USER_OUT = USER_OUT_DRIVE;
 	if (joy_any_en) begin
@@ -310,12 +314,12 @@ always_comb begin
 	end
 `ifdef SECOND_MT32
 	// SECOND_MT32 build: MT32 only drives USER_IO when user has routed it there.
-	else if (mt32_on_primary & mt32_use) begin
+	else if (mt32_on_primary & (mt32_use | (mt32_present & ~mt32_disable))) begin
 		USER_OUT[6:0] = USER_OUT_MT32;
 	end
 `else
-	// Standard build: MT32 shares USER_IO (gated on mt32_use, never at boot).
-	else if (mt32_use) begin
+	// Standard build: MT32 shares USER_IO (Gate 2, never at boot).
+	else if (mt32_use | (mt32_present & ~mt32_disable)) begin
 		USER_OUT[6:0] = USER_OUT_MT32;
 	end
 `endif
