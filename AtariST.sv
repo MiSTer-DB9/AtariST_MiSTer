@@ -660,9 +660,16 @@ linedoubler linedoubler
 reg ce_pix_gst;
 always @(posedge clk_32) begin
 	reg [1:0] fs_div, tdiv, cnt;
+	reg [8:0] fast;
 	reg old_vs;
 
-	if(~hblank_gen && ~vblank_gen && ce_div < tdiv) tdiv <= ce_div;
+	// a faster shifter clock counts once it has lasted 128 CPU cycles: the 12-cycle
+	// high resolution pulses of border and sync-scroll code must not change the frame's rate
+	if(~hblank_gen && ~vblank_gen && ce_div < tdiv) begin
+		fast <= fast + 1'd1;
+		if(&fast) tdiv <= ce_div;
+	end
+	else fast <= 0;
 
 	old_vs <= vsync_n;
 	if(old_vs & ~vsync_n) begin
@@ -1186,7 +1193,10 @@ reg         turbo_bus;
 always @(posedge clk_32)
 	if (mhz8_en1 & as_n) begin
 		use_16mhz <= (enable_16mhz | steroids);
-		turbo_bus <= (enable_cache | steroids);
+		// the RAM cycle changes only during horizontal sync: changed inside a displayed
+		// line the shifter's loads move against its pixel counter, it reloads only every
+		// second word group from then on, and nothing brings it back (vertical bars)
+		if (~hsync_n) turbo_bus <= (enable_cache | steroids);
 	end
 
 wire        fx68_phi1 = use_16mhz ?  clk16_en : mhz8_en1;
